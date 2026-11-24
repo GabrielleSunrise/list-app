@@ -21,9 +21,6 @@
 ## 🚀 Сборка и запуск
 
 1. Клонируйте репозиторий:
-   ```bash
-   git clone https://github.com
-   ```
 2. Откройте проект в **Android Studio**.
 3. Дождитесь синхронизации Gradle и запустите проект на устройстве или эмуляторе (`Shift + F10`).
 4. Для сборки установочного файла выберите в меню: **Build → Build Bundle(s) / APK(s) → Build APK(s)**. Готовый файл появится в `app/build/outputs/apk/debug/app-debug.apk`.
