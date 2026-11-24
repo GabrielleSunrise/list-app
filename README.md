@@ -25,3 +25,5 @@
 3. Дождитесь синхронизации Gradle и запустите проект на устройстве или эмуляторе (`Shift + F10`).
 4. Для сборки установочного файла выберите в меню: **Build → Build Bundle(s) / APK(s) → Build APK(s)**. Готовый файл появится в `app/build/outputs/apk/debug/app-debug.apk`.
 
+Если у вас нет Android Studio, качайте релиз.
+
