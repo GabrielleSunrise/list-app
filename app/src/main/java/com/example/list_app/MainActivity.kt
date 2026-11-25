@@ -24,12 +24,20 @@ import com.google.gson.reflect.TypeToken
 import com.example.list_app.ui.theme.ListappTheme
 import androidx.compose.material.icons.filled.Check
 import java.util.UUID
-import android.graphics.Color
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.foundation.background
 
 data class ShoppingItem(val name: String, val isBought: Boolean = false, val id: String = UUID.randomUUID().toString())
 
@@ -82,7 +90,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = Color.TRANSPARENT
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+
         setContent {
             ListappTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -93,7 +102,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ShoppingScreen() {
     val context = LocalContext.current
@@ -104,6 +113,9 @@ fun ShoppingScreen() {
 
     var searchQuery by remember { mutableStateOf("") }
     var showDictionaryDialog by remember { mutableStateOf(false) }
+
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     fun updateList(action: () -> Unit) {
         action()
@@ -116,11 +128,30 @@ fun ShoppingScreen() {
     }
 
     val suggestions = remember(searchQuery, dictionary.size) {
-        if (searchQuery.isBlank()) emptyList()
-        else dictionary.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
+        val query = searchQuery.trim()
+        if (query.isBlank()) {
+            emptyList()
+        } else {
+            dictionary
+                .filter { it.contains(query, ignoreCase = true) }
+                .sortedWith(
+                    compareBy<String> { !it.startsWith(query, ignoreCase = true) }
+                        .thenBy { it.lowercase() }
+                )
+        }
     }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
+    fun onProductSelected(productName: String, saveToDict: Boolean = false) {
+        if (saveToDict) {
+            addToDictionary(productName)
+        }
+        updateList { shoppingList.add(0, ShoppingItem(productName)) }
+        searchQuery = ""
+        focusManager.clearFocus()     // Убирает мигающий курсор из поля ввода
+        keyboardController?.hide()    // Прячет экранную клавиатуру
+    }
+
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding().padding(16.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
             Text(
                 text = "Список покупок",
@@ -158,38 +189,80 @@ fun ShoppingScreen() {
 
         if (searchQuery.isNotBlank()) {
             Card(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .weight(10f, fill = false) // Карточка не вылезет за пределы экрана до клавиатуры
             ) {
                 Column {
-                    suggestions.forEach { product ->
-                        Text(
-                            text = product,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    updateList { shoppingList.add(0, ShoppingItem(product)) }
-                                    searchQuery = ""
+                    // 1. ПРОКРУЧИВАЕМАЯ ЧАСТЬ: только подсказки из словаря
+                    if (suggestions.isNotEmpty()) {
+                        val scrollState = rememberScrollState()
+                        // Проверяем, есть ли ещё элементы ниже, до которых можно доскроллить
+                        val canScrollDown = scrollState.value < scrollState.maxValue
+
+                        Box(modifier = Modifier.weight(1f, fill = false)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(scrollState)
+                            ) {
+                                suggestions.forEach { product ->
+                                    Text(
+                                        text = product,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onProductSelected(product) }
+                                            .padding(horizontal = 16.dp, vertical = 12.dp) // Чуть компактнее, чтобы влезало больше строк
+                                    )
                                 }
-                                .padding(16.dp)
-                        )
+                            }
+
+                            // Если список не поместился целиком — рисуем мягкое затухание внизу и подсказку
+                            if (canScrollDown) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .height(28.dp)
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color.Transparent,
+                                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Листайте вниз",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
+
+                    // 2. ЗАКРЕПЛЁННАЯ ЧАСТЬ: кнопки добавления нового слова
                     val exactMatch = dictionary.any { it.equals(searchQuery.trim(), ignoreCase = true) }
                     if (!exactMatch) {
-                        // Делаем первую букву заглавной заранее
                         val formattedProduct = searchQuery.trim().replaceFirstChar { it.uppercase() }
 
-                        Divider()
+                        // Разделитель показываем только если сверху есть подсказки
+                        if (suggestions.isNotEmpty()) {
+                            Divider()
+                        }
+
                         // Вариант 1: Добавить и в словарь, и в список
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    addToDictionary(formattedProduct)
-                                    updateList { shoppingList.add(0, ShoppingItem(formattedProduct)) }
-                                    searchQuery = ""
-                                }
+                                .clickable { onProductSelected(formattedProduct, saveToDict = true) }
                                 .padding(16.dp)
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null)
@@ -205,13 +278,14 @@ fun ShoppingScreen() {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    updateList { shoppingList.add(0, ShoppingItem(formattedProduct)) }
-                                    searchQuery = ""
-                                }
+                                .clickable { onProductSelected(formattedProduct) }
                                 .padding(16.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Только в список: «$formattedProduct»",
@@ -227,7 +301,7 @@ fun ShoppingScreen() {
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 16.dp
             )
