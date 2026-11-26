@@ -25,5 +25,5 @@
 3. Дождитесь синхронизации Gradle и запустите проект на устройстве или эмуляторе (`Shift + F10`).
 4. Для сборки установочного файла выберите в меню: **Build → Build Bundle(s) / APK(s) → Build APK(s)**. Готовый файл появится в `app/build/outputs/apk/debug/app-debug.apk`.
 
-Если у вас нет Android Studio, лень заморачиваться, или вы не разработчик, можете просто <a href="https://github.com/GabrielleSunrise/list-app/releases">скачать релиз</a>.
+А ещё можно просто <a href="https://github.com/GabrielleSunrise/list-app/releases">скачать релиз</a>.
 
